@@ -1,7 +1,6 @@
 package core.kcp;
 
 import core.KCPContext;
-import core.kcp.message.KcpCommonMessage;
 import core.kcp.message.KcpConnectedMessage;
 import core.kcp.message.KcpShakeMessage;
 import io.netty.bootstrap.Bootstrap;
@@ -21,9 +20,10 @@ import java.util.concurrent.TimeUnit;
 
 public abstract class KcpNettyClientSession<T> extends KcpSession {
 
-    private InetSocketAddress addr;
+    private InetSocketAddress serverAddress;
     private Channel channel;
-    private IKcpCoder<T> coder;
+
+    private final IKcpCoder<T> coder;
 
     public KcpNettyClientSession(IKcpCoder<T> coder) {
         super(0);
@@ -31,7 +31,7 @@ public abstract class KcpNettyClientSession<T> extends KcpSession {
     }
 
     public void connect(String host, int port) {
-        this.addr = new InetSocketAddress(host,port);
+        this.serverAddress = new InetSocketAddress(host,port);
         EventLoopGroup group = new NioEventLoopGroup();
         try {
             Bootstrap b = new Bootstrap();
@@ -41,15 +41,45 @@ public abstract class KcpNettyClientSession<T> extends KcpSession {
                     .handler(new KcpClientHandler(this));
 
             channel = b.bind(0).sync().channel();
+
+            ScheduledExecutorService service = Executors.newSingleThreadScheduledExecutor();
+            try {
+                service.scheduleAtFixedRate(new Runnable() {
+                    public void run() {
+                        update(System.currentTimeMillis());
+                    }
+                }, 0, 10, TimeUnit.MILLISECONDS);
+            } catch (Exception e) {
+                System.out.println(e.getMessage());
+            }
+
             ByteBuf buf = Unpooled.buffer();
             KcpShakeMessage shake = new KcpShakeMessage();
-            channel.writeAndFlush(new DatagramPacket(shake.encode(buf), addr)).sync();
+            this.send(shake.encode(buf));
 
             channel.closeFuture().await();
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println(e.getMessage());
         } finally {
             group.shutdownGracefully();
+        }
+    }
+
+    @Override
+    public void onReceiveMessage(ByteBuf buffer) {
+        int command = buffer.readInt();
+        int sessionId = buffer.readInt();
+        switch (command) {
+            case KcpUtils.KCP_CMD_SHAKE_CONFIRM:
+                setSessionId(sessionId);
+                start();
+                break;
+            case KcpUtils.KCP_CMD_COMMON:
+                T message = coder.decode(buffer);
+                onReceiveMessage(message);
+                break;
+            default:
+                break;
         }
     }
 
@@ -57,33 +87,15 @@ public abstract class KcpNettyClientSession<T> extends KcpSession {
     public void start() {
         try {
             ByteBuf buf = Unpooled.buffer();
-            KcpConnectedMessage shake = new KcpConnectedMessage(getSessionId());
-            channel.writeAndFlush(new DatagramPacket(shake.encode(buf), addr)).sync();
+            KcpConnectedMessage connectedMessage = new KcpConnectedMessage(getSessionId());
+            this.send(connectedMessage.encode(buf));
 
-            buf = Unpooled.buffer();
-            KcpCommonMessage message = new KcpCommonMessage(getSessionId(),"test".getBytes());
-            this.send(message.encode(buf));
-//            channel.writeAndFlush(new DatagramPacket(message.encode(buf), addr)).sync();
+//            buf = Unpooled.buffer();
+//            KcpCommonMessage message = new KcpCommonMessage(getSessionId(),"test".getBytes());
+//            this.send(message.encode(buf));
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println(e.getMessage());
         }
-
-        try (ScheduledExecutorService service = Executors.newSingleThreadScheduledExecutor()) {
-            service.scheduleAtFixedRate(new Runnable() {
-                public void run() {
-                    System.out.println("update");
-                    update(System.currentTimeMillis());
-                }
-            }, 0, 10, TimeUnit.MILLISECONDS);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    @Override
-    public void onReceiveMessage(ByteBuf buffer) {
-        T message = coder.decode(buffer);
-        onReceiveMessage(message);
     }
 
     public abstract void onReceiveMessage(T message);
@@ -92,7 +104,7 @@ public abstract class KcpNettyClientSession<T> extends KcpSession {
     public int output(byte[] bytes, int i, KCPContext kcpContext, Object o) {
         try {
             ByteBuf buf = Unpooled.copiedBuffer(bytes);
-            channel.writeAndFlush(new DatagramPacket(buf, addr)).sync();
+            channel.writeAndFlush(new DatagramPacket(buf, serverAddress)).sync();
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }

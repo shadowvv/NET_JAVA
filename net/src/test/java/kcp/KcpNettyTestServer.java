@@ -5,6 +5,9 @@ import core.kcp.IKcpCoder;
 import core.kcp.KcpNettyServerClientSession;
 import core.kcp.KcpNettyServerSession;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+
+import java.net.InetSocketAddress;
 
 public class KcpNettyTestServer {
 
@@ -24,10 +27,6 @@ public class KcpNettyTestServer {
                 return null;
             }
         },ServerClientSession.class,2) {
-            @Override
-            public void onReceiveMessage(ByteBuf buffer) {
-
-            }
 
             @Override
             public void dispatchSessionMessage(int sessionId, Object message) {
@@ -37,14 +36,14 @@ public class KcpNettyTestServer {
         serverSession.listen(port);
     }
 
-    public static class ServerClientSession extends KcpNettyServerClientSession{
+    public static class ServerClientSession extends KcpNettyServerClientSession<Object>{
 
-        public ServerClientSession(int sessionId) {
-            super(sessionId);
+        public ServerClientSession(int sessionId, Channel serverChannel, InetSocketAddress clientAddress, IKcpCoder<Object> coder) {
+            super(sessionId, serverChannel, clientAddress, coder);
         }
 
         @Override
-        public void onReceiveMessage(ByteBuf buffer) {
+        public void onReceiveMessage(Object message) {
 
         }
 

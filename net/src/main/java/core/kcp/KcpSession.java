@@ -42,7 +42,7 @@ public abstract class KcpSession implements IKCPContext {
         kcpContext.send(buf.nioBuffer(),buf.readableBytes());
     }
 
-    public void receive(int sessionId, ByteBuf buf){
+    public void receive(ByteBuf buf){
         kcpContext.input(buf.nioBuffer(),buf.readableBytes());
     }
 
@@ -54,6 +54,7 @@ public abstract class KcpSession implements IKCPContext {
         this.buffer.clear();
         int length = kcpContext.receive(buffer,4096);
         if (length > 0) {
+            buffer.flip();
             ByteBuf buf = Unpooled.copiedBuffer(buffer);
             onReceiveMessage(buf);
         }
@@ -61,6 +62,7 @@ public abstract class KcpSession implements IKCPContext {
 
     public void setSessionId(int sessionId) {
         this.sessionId = sessionId;
+        this.kcpContext.setConversationId(sessionId);
     }
 
     public int getSessionId() {

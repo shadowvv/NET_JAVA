@@ -15,20 +15,8 @@ public class KcpServerHandler extends SimpleChannelInboundHandler<DatagramPacket
 
     protected void channelRead0(ChannelHandlerContext ctx, DatagramPacket msg) throws Exception {
         ByteBuf buffer = msg.content().asReadOnly();
-        int command = buffer.readInt();
-        int sessionId = buffer.readInt();
-        switch (command) {
-            case KcpUtils.KCP_CMD_SHAKE_START:
-                serverSession.acceptChannel(ctx.channel(),msg.sender());
-                break;
-            case KcpUtils.KCP_CMD_CONNECTED:
-                serverSession.start();
-                break;
-            case KcpUtils.KCP_CMD_COMMON:
-                serverSession.receive(sessionId,buffer);
-                break;
-            default:
-                break;
-        }
+        int sessionId =  buffer.readInt();
+        buffer.resetReaderIndex();
+        serverSession.receive(sessionId,buffer,msg.sender());
     }
 }

@@ -6,13 +6,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class KcpNettyServerClientRunner implements Runnable {
 
-    private final ConcurrentHashMap<Integer,KcpNettyServerClientSession> clientSessions;
+    private final ConcurrentHashMap<Integer,KcpNettyServerClientSession<?>> clientSessions;
 
     public KcpNettyServerClientRunner() {
         clientSessions = new ConcurrentHashMap<>();
     }
 
-    public void registerSession(int sessionId, KcpNettyServerClientSession session) {
+    public void registerSession(int sessionId, KcpNettyServerClientSession<?> session) {
         clientSessions.put(sessionId, session);
     }
 
@@ -23,15 +23,15 @@ public class KcpNettyServerClientRunner implements Runnable {
     @Override
     public void run() {
         long current = System.currentTimeMillis();
-        for (KcpNettyServerClientSession session : clientSessions.values()) {
+        for (KcpNettyServerClientSession<?> session : clientSessions.values()) {
             session.update(current);
         }
     }
 
     public void receive(int sessionId, ByteBuf buf) {
-        KcpNettyServerClientSession clientSession = clientSessions.get(sessionId);
+        KcpNettyServerClientSession<?> clientSession = clientSessions.get(sessionId);
         if (clientSession != null) {
-            clientSession.receive(sessionId, buf);
+            clientSession.receive(buf);
         }
     }
 }
