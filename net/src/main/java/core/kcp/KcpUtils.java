@@ -5,7 +5,7 @@ public class KcpUtils {
     /**
      * 推送数据命令
      */
-    public static final int KCP_CMD_SHAKE_START = 81;
+    public static final int KCP_CMD_SHAKE = 81;
     /**
      * 推送ack信息命令
      */

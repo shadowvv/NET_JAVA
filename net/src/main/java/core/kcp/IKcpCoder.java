@@ -1,10 +1,11 @@
 package core.kcp;
 
+import core.kcp.message.KcpCommonMessage;
 import io.netty.buffer.ByteBuf;
 
-public interface IKcpCoder<T> {
+public interface IKcpCoder<T extends KcpCommonMessage> {
 
-    ByteBuf encode(ByteBuf buffer);
+    ByteBuf encode(T message);
 
     T decode(ByteBuf buffer);
 

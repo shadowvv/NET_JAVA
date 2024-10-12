@@ -2,34 +2,42 @@ package core.kcp.message;
 
 import io.netty.buffer.ByteBuf;
 
-public class KcpBaseMessage {
+public abstract class KcpBaseMessage {
 
-    private final int command;
-    private final int sessionId;
-    private final byte[] data;
+    private int conversationId;
+    private int command;
 
-    KcpBaseMessage(int sessionId, int command, byte[] data) {
-        this.sessionId = sessionId;
-        this.command = command;
-        this.data = data;
+    public KcpBaseMessage(){
+
     }
 
-    public int getSessionId() {
-        return sessionId;
+    public KcpBaseMessage(int conversationId, int command) {
+        this.conversationId = conversationId;
+        this.command = command;
+    }
+
+    public ByteBuf encode(ByteBuf buffer) {
+        buffer.writeInt(conversationId);
+        buffer.writeInt(command);
+        encode0(buffer);
+        return buffer;
+    }
+
+    protected abstract void encode0(ByteBuf buffer);
+
+    public void decode(ByteBuf buffer){
+        conversationId = buffer.readInt();
+        command = buffer.readInt();
+        decode0(buffer);
+    }
+
+    protected abstract void decode0(ByteBuf buffer);
+
+    public int getConversationId() {
+        return conversationId;
     }
 
     public int getCommand() {
         return command;
-    }
-
-    public byte[] getData() {
-        return data;
-    }
-
-    public ByteBuf encode(ByteBuf buffer) {
-        buffer.writeInt(command);
-        buffer.writeInt(sessionId);
-        buffer.writeBytes(data);
-        return buffer;
     }
 }

@@ -6,19 +6,27 @@ import core.KCPSegment;
 import core.KCPUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.channel.socket.DatagramPacket;
 
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 
 public abstract class KcpSession implements IKCPContext {
 
     private int sessionId;
+    private InetSocketAddress remoteAddress;
+    private Channel channel;
+
     private final KCPContext kcpContext;
     private final ByteBuffer buffer;
 
-    public KcpSession(int sessionId) {
+    public KcpSession(int sessionId, InetSocketAddress remoteAddress, Channel channel) {
         this.sessionId = sessionId;
-        this.buffer = ByteBuffer.allocate(4096);
+        this.remoteAddress = remoteAddress;
+        this.channel = channel;
 
+        this.buffer = ByteBuffer.allocate(4096);
         this.kcpContext = new KCPContext(sessionId,sessionId,this);
         kcpContext.setWindowSize(KCPUtils.KCP_WND_SND,KCPUtils.KCP_WND_RCV);
         kcpContext.setRemoteWindow(KCPUtils.KCP_WND_RCV);
@@ -69,7 +77,21 @@ public abstract class KcpSession implements IKCPContext {
         return sessionId;
     }
 
-    public abstract void start();
+    @Override
+    public int output(byte[] bytes, int i, KCPContext kcpContext, Object o) {
+        try {
+            ByteBuf buf = Unpooled.copiedBuffer(bytes);
+            channel.writeAndFlush(new DatagramPacket(buf, remoteAddress)).sync();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        return 0;
+    }
+
+    @Override
+    public void writeLog(String s, KCPContext kcpContext, Object o) {
+
+    }
 
     public abstract void onReceiveMessage(ByteBuf buffer);
 }

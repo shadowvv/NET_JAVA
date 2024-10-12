@@ -1,38 +1,42 @@
 package core.kcp;
 
-import core.KCPContext;
+import core.kcp.message.KcpBaseMessage;
+import core.kcp.message.KcpCommonMessage;
+import core.kcp.message.KcpConnectedMessage;
+import core.kcp.message.KcpShakeConfirmMessage;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.DatagramPacket;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 
 import java.net.InetSocketAddress;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public abstract class KcpNettyServerSession<T> extends KcpSession {
+public abstract class KcpNettyServerSession<T extends KcpCommonMessage> {
 
     private Channel serverChannel;
     private final int workThreadNum;
-    private final HashMap<Integer,KcpNettyServerClientRunner> clientRunners;
-    private final Class<? extends KcpNettyServerClientSession<T>> clientSessionClass;
+    private final ConcurrentHashMap<String,KcpServerClientSession<T>> shakeClients;
+    private final ConcurrentHashMap<Integer,KcpNettyServerClientRunner> clientRunners;
 
     private final IKcpCoder<T> coder;
 
-    public KcpNettyServerSession(IKcpCoder<T> coder,Class<? extends KcpNettyServerClientSession<T>> serverClientSession,int workThreadNum) {
-        super(0);
+    public KcpNettyServerSession(IKcpCoder<T> coder,int workThreadNum) {
         this.coder = coder;
         this.workThreadNum = workThreadNum;
-        clientRunners = new HashMap<>();
+        this.shakeClients = new ConcurrentHashMap<>();
+        this.clientRunners = new ConcurrentHashMap<>();
         for (int i = 0; i < workThreadNum; i++) {
             clientRunners.put(i, new KcpNettyServerClientRunner());
         }
-        this.clientSessionClass = serverClientSession;
     }
 
     public void listen(int port){
@@ -46,15 +50,16 @@ public abstract class KcpNettyServerSession<T> extends KcpSession {
 
             serverChannel = bootstrap.bind(port).sync().channel();
 
-            ScheduledExecutorService service = Executors.newSingleThreadScheduledExecutor();
-            try {
-                service.scheduleAtFixedRate(new Runnable() {
-                    public void run() {
-                        update(System.currentTimeMillis());
-                    }
-                }, 0, 10, TimeUnit.MILLISECONDS);
-            } catch (Exception e) {
-                System.out.println(e.getMessage());
+            for (int i = 0; i < workThreadNum; i++) {
+                KcpNettyServerClientRunner runner = clientRunners.get(i);
+                ScheduledExecutorService service = Executors.newSingleThreadScheduledExecutor();
+                try {
+                    service.scheduleAtFixedRate(runner, 0, 10, TimeUnit.MILLISECONDS);
+                } catch (Exception e) {
+                    System.out.println(e.getMessage());
+                } finally {
+//                    service.shutdown();
+                }
             }
 
             serverChannel.closeFuture().await();
@@ -65,73 +70,50 @@ public abstract class KcpNettyServerSession<T> extends KcpSession {
         }
     }
 
-    public void receive(int sessionId, ByteBuf buffer, InetSocketAddress sender) {
-        if (sessionId == 0){
-            acceptChannel(sender);
-        }else {
-            int index = sessionId % workThreadNum;
-            if (!clientRunners.containsKey(index)) {
-               clientRunners.get(index).receive(sessionId, buffer);
-            }else {
-                System.out.println(clientRunners.get(index).toString());
-            }
+    public void onClientShake(InetSocketAddress senderAddr) {
+        if (shakeClients.containsKey(senderAddr.getAddress().getHostAddress())){
+            return;
         }
-    }
-
-    @Override
-    public void onReceiveMessage(ByteBuf buffer){
-        int command = buffer.readInt();
-        switch (command) {
-            case KcpUtils.KCP_CMD_CONNECTED:
-                start();
-                break;
-            case KcpUtils.KCP_CMD_COMMON:
-                break;
-            default:
-                break;
-        }
-    }
-
-    private void acceptChannel(InetSocketAddress clientAddress) {
         int sessionId = SessionIdCreator.getNextSessionId();
+        KcpServerClientSession<T> clientSession = new KcpServerClientSession<>(sessionId,senderAddr,serverChannel);
+        shakeClients.put(senderAddr.getAddress().getHostAddress(),clientSession);
+
+        ByteBuf buf = Unpooled.buffer();
+        KcpShakeConfirmMessage shakeConfirmMessage = new KcpShakeConfirmMessage(sessionId);
         try {
-            int index = sessionId % workThreadNum;
-            if (!clientRunners.containsKey(index)) {
-                clientRunners.put(index, new KcpNettyServerClientRunner());
-            }
-            KcpNettyServerClientSession<T> serverClientSessionClass = clientSessionClass.getDeclaredConstructor(int.class,Channel.class,InetSocketAddress.class,IKcpCoder.class).newInstance(sessionId,serverChannel,clientAddress,coder);
-            clientRunners.get(index).registerSession(sessionId,serverClientSessionClass);
-            serverClientSessionClass.start();
-        }catch (Exception e){
-            System.out.println(e.getMessage());
+            serverChannel.writeAndFlush(new DatagramPacket(shakeConfirmMessage.encode(buf), senderAddr)).sync();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
-    @Override
-    public void start() {
-        for (int i = 0; i < workThreadNum; i++) {
-            KcpNettyServerClientRunner runner = clientRunners.get(i);
-            ScheduledExecutorService service = Executors.newSingleThreadScheduledExecutor();
-            try {
-                service.scheduleAtFixedRate(runner, 0, 10, TimeUnit.MILLISECONDS);
-            } catch (Exception e) {
-                System.out.println(e.getMessage());
-            } finally {
-                service.shutdown();
-            }
+    public void onClientConnected(InetSocketAddress senderAddr, int newConversationId) {
+        if (!shakeClients.containsKey(senderAddr.getAddress().getHostAddress())){
+            return;
         }
+
+        int index = newConversationId % workThreadNum;
+        KcpServerClientSession<T> clientSession = shakeClients.get(senderAddr.getAddress().getHostAddress());
+        if (newConversationId != clientSession.getSessionId()){
+            clientRunners.get(index).unregisterSession(clientSession.getSessionId());
+            return;
+        }
+
+        if (!clientRunners.containsKey(index)) {
+            clientRunners.put(index, new KcpNettyServerClientRunner());
+        }
+        clientRunners.get(index).registerSession(newConversationId,clientSession);
+        shakeClients.remove(senderAddr.getAddress().getHostAddress());
     }
 
-    @Override
-    public int output(byte[] bytes, int i, KCPContext kcpContext, Object o) {
-        return 0;
-    }
-
-    @Override
-    public void writeLog(String s, KCPContext kcpContext, Object o) {
-
+    public void receive(int sessionId, ByteBuf buffer) {
+        int index = sessionId % workThreadNum;
+        if (clientRunners.containsKey(index)) {
+           clientRunners.get(index).receive(sessionId, buffer);
+        }else {
+            System.out.println(clientRunners.get(index).toString());
+        }
     }
 
     public abstract void dispatchSessionMessage(int sessionId, T message);
-
 }

@@ -1,9 +1,30 @@
 package core.kcp.message;
 
 import core.kcp.KcpUtils;
+import io.netty.buffer.ByteBuf;
 
 public class KcpConnectedMessage extends KcpBaseMessage {
-    public KcpConnectedMessage(int sessionId) {
-        super(sessionId, KcpUtils.KCP_CMD_CONNECTED, new byte[0]);
+
+    private int kcpConversionId;
+
+    public KcpConnectedMessage(int kcpConversionId) {
+        super(0, KcpUtils.KCP_CMD_CONNECTED);
+        this.kcpConversionId = kcpConversionId;
+
+        System.out.println("send KCP_CMD_CONNECTED");
+    }
+
+    public int getKcpConversionId() {
+        return kcpConversionId;
+    }
+
+    @Override
+    protected void encode0(ByteBuf buffer) {
+        buffer.writeInt(kcpConversionId);
+    }
+
+    @Override
+    protected void decode0(ByteBuf buffer) {
+        kcpConversionId = buffer.readInt();
     }
 }
