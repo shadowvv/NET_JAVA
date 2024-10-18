@@ -1,7 +1,8 @@
 package kcp;
 
+import core.KCPContext;
 import core.kcp.IKcpCoder;
-import core.kcp.KcpNettyClientSession;
+import core.kcp.KcpClientSession;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -11,14 +12,14 @@ import java.util.concurrent.TimeUnit;
 
 public class KcpNettyTestClient {
 
-    KcpNettyClientSession<KcpTestLogicMessage> session;
+    KcpClientSession<KcpTestLogicMessage> session;
 
     public KcpNettyTestClient() {
 
     }
 
     public void connect(String host, int port) {
-         session = new KcpNettyClientSession<KcpTestLogicMessage>(new IKcpCoder<KcpTestLogicMessage>() {
+         session = new KcpClientSession<KcpTestLogicMessage>(new IKcpCoder<KcpTestLogicMessage>() {
             @Override
             public ByteBuf encode(KcpTestLogicMessage message) {
                 ByteBuf buffer = Unpooled.buffer();
@@ -35,7 +36,17 @@ public class KcpNettyTestClient {
             public void onReceiveMessage(KcpTestLogicMessage message) {
 
             }
-        };
+
+             @Override
+             public void writeLog(String s, KCPContext kcpContext, Object o) {
+
+             }
+
+             @Override
+             public void onDisconnect() {
+
+             }
+         };
         session.connect(host,port);
     }
 

@@ -1,7 +1,7 @@
 package kcp;
 
 import core.kcp.IKcpCoder;
-import core.kcp.KcpNettyServerSession;
+import core.kcp.KcpServerSession;
 import io.netty.buffer.ByteBuf;
 
 public class KcpNettyTestServer {
@@ -11,7 +11,7 @@ public class KcpNettyTestServer {
     }
 
     public void init(int port) {
-        KcpNettyServerSession<KcpTestLogicMessage> serverSession = new KcpNettyServerSession<>(new IKcpCoder<KcpTestLogicMessage>() {
+        KcpServerSession<KcpTestLogicMessage> serverSession = new KcpServerSession<>(new IKcpCoder<KcpTestLogicMessage>() {
             @Override
             public ByteBuf encode(KcpTestLogicMessage message) {
                 return null;

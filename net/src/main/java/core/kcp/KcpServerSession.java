@@ -1,8 +1,6 @@
 package core.kcp;
 
-import core.kcp.message.KcpBaseMessage;
 import core.kcp.message.KcpCommonMessage;
-import core.kcp.message.KcpConnectedMessage;
 import core.kcp.message.KcpShakeConfirmMessage;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
@@ -20,22 +18,22 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public abstract class KcpNettyServerSession<T extends KcpCommonMessage> {
+public abstract class KcpServerSession<T extends KcpCommonMessage> {
 
     private Channel serverChannel;
     private final int workThreadNum;
-    private final ConcurrentHashMap<String,KcpServerClientSession<T>> shakeClients;
-    private final ConcurrentHashMap<Integer,KcpNettyServerClientRunner> clientRunners;
+    private final ConcurrentHashMap<String,KcpServerClientSession> shakeClients;
+    private final ConcurrentHashMap<Integer, KcpServerClientRunner> clientRunners;
 
     private final IKcpCoder<T> coder;
 
-    public KcpNettyServerSession(IKcpCoder<T> coder,int workThreadNum) {
+    public KcpServerSession(IKcpCoder<T> coder, int workThreadNum) {
         this.coder = coder;
         this.workThreadNum = workThreadNum;
         this.shakeClients = new ConcurrentHashMap<>();
         this.clientRunners = new ConcurrentHashMap<>();
         for (int i = 0; i < workThreadNum; i++) {
-            clientRunners.put(i, new KcpNettyServerClientRunner());
+            clientRunners.put(i, new KcpServerClientRunner());
         }
     }
 
@@ -51,7 +49,7 @@ public abstract class KcpNettyServerSession<T extends KcpCommonMessage> {
             serverChannel = bootstrap.bind(port).sync().channel();
 
             for (int i = 0; i < workThreadNum; i++) {
-                KcpNettyServerClientRunner runner = clientRunners.get(i);
+                KcpServerClientRunner runner = clientRunners.get(i);
                 ScheduledExecutorService service = Executors.newSingleThreadScheduledExecutor();
                 try {
                     service.scheduleAtFixedRate(runner, 0, 10, TimeUnit.MILLISECONDS);
@@ -74,8 +72,9 @@ public abstract class KcpNettyServerSession<T extends KcpCommonMessage> {
         if (shakeClients.containsKey(senderAddr.getAddress().getHostAddress())){
             return;
         }
+        int conversationId = ConversationIdCreator.getConversationId();
         int sessionId = SessionIdCreator.getNextSessionId();
-        KcpServerClientSession<T> clientSession = new KcpServerClientSession<>(sessionId,senderAddr,serverChannel);
+        KcpServerClientSession clientSession = new KcpServerClientSession(sessionId,conversationId,senderAddr,serverChannel);
         shakeClients.put(senderAddr.getAddress().getHostAddress(),clientSession);
 
         ByteBuf buf = Unpooled.buffer();
@@ -93,23 +92,23 @@ public abstract class KcpNettyServerSession<T extends KcpCommonMessage> {
         }
 
         int index = newConversationId % workThreadNum;
-        KcpServerClientSession<T> clientSession = shakeClients.get(senderAddr.getAddress().getHostAddress());
+        KcpServerClientSession clientSession = shakeClients.get(senderAddr.getAddress().getHostAddress());
         if (newConversationId != clientSession.getSessionId()){
             clientRunners.get(index).unregisterSession(clientSession.getSessionId());
             return;
         }
 
         if (!clientRunners.containsKey(index)) {
-            clientRunners.put(index, new KcpNettyServerClientRunner());
+            clientRunners.put(index, new KcpServerClientRunner());
         }
         clientRunners.get(index).registerSession(newConversationId,clientSession);
         shakeClients.remove(senderAddr.getAddress().getHostAddress());
     }
 
-    public void receive(int sessionId, ByteBuf buffer) {
+    public void input(int sessionId, ByteBuf buffer) {
         int index = sessionId % workThreadNum;
         if (clientRunners.containsKey(index)) {
-           clientRunners.get(index).receive(sessionId, buffer);
+           clientRunners.get(index).input(sessionId, buffer);
         }else {
             System.out.println(clientRunners.get(index).toString());
         }
