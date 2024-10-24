@@ -1,17 +1,17 @@
-package core.kcp.message;
+package org.drop.net.core.kcp.message;
 
-import core.kcp.KcpUtils;
+import org.drop.net.core.kcp.KcpUtils;
 import io.netty.buffer.ByteBuf;
 
-public class KcpConnectedMessage extends KcpBaseMessage {
+public class KcpShakeConfirmMessage extends KcpBaseMessage {
 
     private int kcpConversionId;
 
-    public KcpConnectedMessage(int kcpConversionId) {
-        super(0, KcpUtils.KCP_CMD_CONNECTED);
+    public KcpShakeConfirmMessage(int kcpConversionId) {
+        super(0, KcpUtils.KCP_CMD_SHAKE_CONFIRM);
         this.kcpConversionId = kcpConversionId;
 
-        System.out.println("send KCP_CMD_CONNECTED");
+        System.out.println("send KCP_CMD_SHAKE_CONFIRM");
     }
 
     public int getKcpConversionId() {

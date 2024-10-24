@@ -1,4 +1,4 @@
-package core.kcp;
+package org.drop.net.core.kcp;
 
 public enum KcpSessionStatus {
 

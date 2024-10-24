@@ -1,7 +1,7 @@
-package core.kcp;
+package org.drop.net.core.kcp;
 
-import core.kcp.message.KcpCommonMessage;
-import core.kcp.message.KcpShakeConfirmMessage;
+import org.drop.net.core.kcp.message.KcpCommonMessage;
+import org.drop.net.core.kcp.message.KcpShakeConfirmMessage;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;

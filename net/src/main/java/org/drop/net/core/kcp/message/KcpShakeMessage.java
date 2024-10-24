@@ -1,6 +1,6 @@
-package core.kcp.message;
+package org.drop.net.core.kcp.message;
 
-import core.kcp.KcpUtils;
+import org.drop.net.core.kcp.KcpUtils;
 import io.netty.buffer.ByteBuf;
 
 public class KcpShakeMessage extends KcpBaseMessage {

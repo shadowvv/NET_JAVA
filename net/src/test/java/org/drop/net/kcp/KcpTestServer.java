@@ -1,12 +1,12 @@
-package kcp;
+package org.drop.net.kcp;
 
-import core.kcp.IKcpCoder;
-import core.kcp.KcpServerSession;
+import org.drop.net.core.kcp.IKcpCoder;
+import org.drop.net.core.kcp.KcpServerSession;
 import io.netty.buffer.ByteBuf;
 
-public class KcpNettyTestServer {
+public class KcpTestServer {
 
-    public KcpNettyTestServer() {
+    public KcpTestServer() {
 
     }
 
@@ -32,7 +32,7 @@ public class KcpNettyTestServer {
     }
 
     public static void main(String[] args) {
-        KcpNettyTestServer server = new KcpNettyTestServer();
+        KcpTestServer server = new KcpTestServer();
         server.init(8800);
     }
 

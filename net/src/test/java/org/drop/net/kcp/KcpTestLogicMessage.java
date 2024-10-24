@@ -1,6 +1,6 @@
-package kcp;
+package org.drop.net.kcp;
 
-import core.kcp.message.KcpCommonMessage;
+import org.drop.net.core.kcp.message.KcpCommonMessage;
 import io.netty.buffer.ByteBuf;
 
 public class KcpTestLogicMessage extends KcpCommonMessage {

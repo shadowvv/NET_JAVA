@@ -1,4 +1,4 @@
-package core.kcp;
+package org.drop.net.core.kcp;
 
 import io.netty.buffer.ByteBuf;
 

@@ -1,10 +1,10 @@
-package core.kcp;
+package org.drop.net.core.kcp;
 
 import core.KCPContext;
-import core.kcp.message.KcpCommonMessage;
-import core.kcp.message.KcpConnectedMessage;
-import core.kcp.message.KcpHeartBeatMessage;
-import core.kcp.message.KcpShakeMessage;
+import org.drop.net.core.kcp.message.KcpCommonMessage;
+import org.drop.net.core.kcp.message.KcpConnectedMessage;
+import org.drop.net.core.kcp.message.KcpHeartBeatMessage;
+import org.drop.net.core.kcp.message.KcpShakeMessage;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -16,25 +16,24 @@ import io.netty.channel.socket.DatagramPacket;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 
 import java.net.InetSocketAddress;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 public abstract class KcpClientSession<T extends KcpCommonMessage> {
 
     private KcpSession kcpSession;
     private InetSocketAddress serverAddress;
     private Channel channel;
-    private final IKcpCoder<T> coder;
     private KcpSessionStatus status;
+    private final IKcpCoder<T> coder;
+    private final int buffSize;
 
     private long lastShakeTime;
     private int resentShakeCount;
-
     private long lastHeartBeatTime;
 
-    public KcpClientSession(IKcpCoder<T> coder) {
+    public KcpClientSession(IKcpCoder<T> coder,int buffSize) {
         this.coder = coder;
+        this.buffSize = buffSize;
         this.status = KcpSessionStatus.NEW;
     }
 
@@ -49,7 +48,20 @@ public abstract class KcpClientSession<T extends KcpCommonMessage> {
                     .handler(new KcpClientHandler(this));
             channel = b.bind(0).sync().channel();
 
-            sendShakeMessage();
+            this.sendShakeMessage();
+
+            ScheduledExecutorService service1 = Executors.newSingleThreadScheduledExecutor();
+            Future<Boolean> future = service1.submit(new Callable<Boolean>() {
+
+                @Override
+                public Boolean call() throws Exception {
+                    while (status == KcpSessionStatus.ACTIVE) {
+                        return true;
+                    }
+                    return false;
+                }
+            });
+            future.get();
 
             ScheduledExecutorService service = Executors.newSingleThreadScheduledExecutor();
             try {
@@ -105,6 +117,7 @@ public abstract class KcpClientSession<T extends KcpCommonMessage> {
 
     public void onShakeConfirm(int conversationId,int sessionId) {
         kcpSession = new ClientKcpSession<>(conversationId, sessionId,serverAddress, channel, this);
+        kcpSession.init(buffSize);
         try {
             ByteBuf buf = Unpooled.buffer();
             KcpConnectedMessage connectedMessage = new KcpConnectedMessage(conversationId);
@@ -150,11 +163,18 @@ public abstract class KcpClientSession<T extends KcpCommonMessage> {
         }
     }
 
+    /**
+     * 接收到消息，可以直接在net线程处理，推荐将消息投递到其他逻辑线程处理
+     * @param message 消息
+     */
     public abstract void onReceiveMessage(T message);
 
-    public abstract void writeLog(String s, KCPContext kcpContext, Object o);
-
+    /**
+     *
+     */
     public abstract void onDisconnect();
+
+    public abstract void writeLog(String s, KCPContext kcpContext, Object o);
 
     private static class ClientKcpSession<T extends KcpCommonMessage> extends KcpSession {
 
